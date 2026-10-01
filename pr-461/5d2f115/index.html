@@ -1,0 +1,13 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#461 界面预览 · 5d2f115</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#461 界面预览</h1><p class="m">commit 5d2f115 · <a href="https://github.com/yetone/magpie/pull/461">回到 PR</a> · 「会话」页顶部的 Agent 标签栏改造：标签实际放不下时收成一个紧凑的 Agent 选择按钮，点开用现有菜单列出全部 Agent 及会话数（键盘可选、Escape 还焦点、选中后退出回收站）；420px 以下的窄窗口把搜索框和回收站挪到下一行。顺带把选中的标签换成与分段控件一致的底色/描边（并加 aria-pressed），菜单锚点同步 aria-expanded。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-sessions-view.png" alt="「会话」页：本 PR 改的就是顶部这一行"><figcaption>「会话」页的 Agent 标签栏 · 「会话」页：本 PR 改的就是顶部这一行</figcaption></figure>
+<figure><img src="02-sessions-head.png" alt="顶部一行：Agent 标签、搜索框与回收站"><figcaption>「会话」页的 Agent 标签栏 · 顶部一行：Agent 标签、搜索框与回收站</figcaption></figure>
+</main></html>

@@ -1,0 +1,39 @@
+{
+  "summary": "在设置页新增「可观测性」一栏：OTLP 导出与导出指标两个开关，以及 OTLP 端点、OTLP 请求头两个输入框，改动随偏好一起保存；当存在 MAGPIE_OTEL_* 环境变量时，该栏底部多一行覆盖提示。",
+  "scenes": [
+    {
+      "title": "设置页的可观测性一栏",
+      "shots": [
+        {
+          "file": "01-otel-section-default.png",
+          "caption": "设置页「可观测性」：OTLP 导出、OTLP 端点、OTLP 请求头、导出指标",
+          "width": 2560
+        },
+        {
+          "file": "02-otel-endpoint-headers.png",
+          "caption": "填好端点与请求头后的「可观测性」",
+          "width": 2560
+        },
+        {
+          "file": "03-otel-export-on.png",
+          "caption": "OTLP 导出切到开启后的「可观测性」",
+          "width": 2560
+        },
+        {
+          "file": "04-otel-metrics-on.png",
+          "caption": "导出指标切到开启后的「可观测性」",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "导出本身看不到：沙箱里没有可用的 OTLP 采集端，也没有真实 collector 可看，所以后台队列、批量发送、重试、退出排空、以及 trace/metrics 的实际内容（只含模型、Token、状态、耗时元数据）都无法在界面里呈现，只能看到设置项本身。「环境变量会覆盖这里保存的 OTLP 设置」这行提示只在设置了 MAGPIE_OTEL_ENABLED/ENDPOINT/HEADERS/METRICS 时出现，沙箱未设置这些变量时不会显示。",
+  "interactive": true,
+  "pages": 1
+}

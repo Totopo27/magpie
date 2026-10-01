@@ -1,0 +1,29 @@
+{
+  "summary": "「会话」页顶部的 Agent 标签栏改造：标签实际放不下时收成一个紧凑的 Agent 选择按钮，点开用现有菜单列出全部 Agent 及会话数（键盘可选、Escape 还焦点、选中后退出回收站）；420px 以下的窄窗口把搜索框和回收站挪到下一行。顺带把选中的标签换成与分段控件一致的底色/描边（并加 aria-pressed），菜单锚点同步 aria-expanded。",
+  "scenes": [
+    {
+      "title": "「会话」页的 Agent 标签栏",
+      "shots": [
+        {
+          "file": "01-sessions-view.png",
+          "caption": "「会话」页：本 PR 改的就是顶部这一行",
+          "width": 2560
+        },
+        {
+          "file": "02-sessions-head.png",
+          "caption": "顶部一行：Agent 标签、搜索框与回收站",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里只有刚安装的 Agent（且只有 DeepSeek 一个供应商、没有历史会话），「会话」页的标签不会挤满录制用的 1280×800 窗口，录像中也没法把窗口缩窄或放大文字，因此紧凑 Agent 选择按钮、它弹出的 Agent 菜单、以及窄屏下搜索框与回收站换行的排布都拍不到——只能拍到标签栏这一行本身。（标签不够多时选择按钮本就隐藏，这是预期的。）",
+  "interactive": true,
+  "pages": 2
+}

@@ -1,0 +1,29 @@
+{
+  "summary": "这次改动只在 app.css 里加了一条 @media (max-width: 600px) 规则：窗口窄到 600px 及以下时，Agent 行的模型/effort 控件换到名字下面一行并与名字左对齐，更宽的窗口里仍并排在名字右侧；其余是两个测试/文档文件的改动。",
+  "scenes": [
+    {
+      "title": "Agent 行的控件列（窄窗布局在本沙盒看不到）",
+      "shots": [
+        {
+          "file": "01-agents-at-sandbox-width.png",
+          "caption": "沙盒 1280px 窗口下的 Agent 列表：名字与模型、provider 控件的位置",
+          "width": 2560
+        },
+        {
+          "file": "02-agent-row-closeup.png",
+          "caption": "放大一个 Agent 行：名字列与右侧控件列的排布",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": null,
+  "poster": null,
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述说「文字放大减少可用 CSS 宽度」时也会走新的堆叠布局，但 diff 只按视口宽度的媒体查询断点判断；这个应用的字号是挂在 documentElement 上的 --zoom 自定义属性，不会改变媒体查询，所以放大字号并不会触发这条规则。",
+  "unseen": "新布局本身：它只在视口宽度 ≤600px 时生效，而沙盒是固定在 1280×800 的浏览器窗口，可用的操作里没有改变窗口/视口宽度的办法，只能看到 ≥601px 的那一支（这一支的并排布局与改动前相同，看不出差别）。文字放大触发堆叠的情况同样看不到。",
+  "interactive": false,
+  "pages": 1
+}

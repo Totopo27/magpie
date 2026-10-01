@@ -1,0 +1,13 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#440 界面预览 · 580dc03</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#440 界面预览</h1><p class="m">commit 580dc03 · <a href="https://github.com/yetone/magpie/pull/440">回到 PR</a> · 这次改动只在 app.css 里加了一条 @media (max-width: 600px) 规则：窗口窄到 600px 及以下时，Agent 行的模型/effort 控件换到名字下面一行并与名字左对齐，更宽的窗口里仍并排在名字右侧；其余是两个测试/文档文件的改动。</p>
+
+<figure><img src="01-agents-at-sandbox-width.png" alt="沙盒 1280px 窗口下的 Agent 列表：名字与模型、provider 控件的位置"><figcaption>Agent 行的控件列（窄窗布局在本沙盒看不到） · 沙盒 1280px 窗口下的 Agent 列表：名字与模型、provider 控件的位置</figcaption></figure>
+<figure><img src="02-agent-row-closeup.png" alt="放大一个 Agent 行：名字列与右侧控件列的排布"><figcaption>Agent 行的控件列（窄窗布局在本沙盒看不到） · 放大一个 Agent 行：名字列与右侧控件列的排布</figcaption></figure>
+</main></html>
