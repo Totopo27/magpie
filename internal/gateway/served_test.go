@@ -203,6 +203,17 @@ func TestSwappedModel(t *testing.T) {
 		{"us.anthropic.claude-sonnet-4-20250514-v1:0", "claude-sonnet-4-20250514", false},
 		{"auto", "gpt-5-mini", false}, // Copilot's Auto, Cursor's: the vendor was asked to pick
 		{"copilot/auto", "claude-sonnet-5", false},
+		{"gemini-3.8-flash-medium", "gemini-3.8-flash", false},
+		{"gemini-3.8-flash-low", "gemini-3.8-flash", false},
+		{"gemini-3.8-flash-high", "gemini-3.8-flash", false},
+		{"gemini-3.8-flash-xhigh", "gemini-3.8-flash", false},
+		{"gemini-3.8-flash-extra-high", "gemini-3.8-flash", false},
+		{"gemini-3.8-flash-extra-low", "gemini-3.8-flash", false},
+		{"gemini-3.8-flash-minimal", "gemini-3.8-flash", false},
+		{"gemini-3.8-flash", "gemini-3.8-flash-medium", false},
+		{"gemini-3.8-flash-medium", "gemini-2.5-flash", true},
+		{"gemini-3.8-flash-medium", "gemini-3.8-pro", true},
+		{"claude-opus-4-6-thinking", "claude-opus-4-6", false},
 		{"sol", "", false},
 		{"", "luna", false},
 	} {

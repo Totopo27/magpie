@@ -14,8 +14,9 @@ import (
 
 // versionTail is what a vendor puts after a model's name for the version
 // it answered with: a date, a build number, Bedrock's v1:0, latest,
-// preview. Not v3 alone: deepseek-v3 is another model than deepseek-v2.
-var versionTail = regexp.MustCompile(`(?:[-_@:](?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|\d{6,8}|\d{3,4}|v\d+:\d+|latest|preview|exp))+$`)
+// preview, or an effort level (gemini-3.8-flash-medium answering as
+// gemini-3.8-flash). Not v3 alone: deepseek-v3 is another model than deepseek-v2.
+var versionTail = regexp.MustCompile(`(?:[-_@:](?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|\d{6,8}|\d{3,4}|v\d+:\d+|latest|preview|exp|extra-high|extra-low|xhigh|minimal|low|medium|high|thinking))+$`)
 
 // vendorDot is Bedrock's region and maker before a model's name
 // (us.anthropic.claude-…).
