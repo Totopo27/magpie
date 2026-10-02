@@ -57,6 +57,65 @@ func TestDeepSeekToolPatternsOnlySchemas(t *testing.T) {
 	}
 }
 
+func TestDeepSeekToolPatternsByteIdentity(t *testing.T) {
+	p := provider.Provider{Preset: "deepseek"}
+
+	// 1. A body with nothing to fix passes through byte for byte.
+	nothingToFix := []byte(`{
+		"z_order": 1,
+		"a_order": 2,
+		"html_description": "User description with <special> & characters",
+		"tools": [
+			{"name": "test", "description": "<escapes> & unescaped", "input_schema": {"type": "object", "properties": {"url": {"pattern": "^https?://.*$"}}}}
+		]
+	}`)
+	if got := deepseekToolPatterns(p, provider.Anthropic, nothingToFix); !bytes.Equal(got, nothingToFix) {
+		t.Fatalf("body with nothing to fix did not pass through byte for byte:\ngot : %s\nwant: %s", got, nothingToFix)
+	}
+
+	// 2. A body with a pattern to fix differs ONLY at the pattern, preserving
+	// key order, whitespaces, and <, >, & characters in tool descriptions.
+	fixedBodyInput := []byte(`{
+		"b_key": "val",
+		"a_key": "val",
+		"tools": [
+			{
+				"name": "Artifact",
+				"description": "Writes files with <tags> & &amp; entities",
+				"input_schema": {
+					"type": "object",
+					"properties": {
+						"content": {"type": "string", "pattern": "^[^\\0]*$"}
+					}
+				}
+			}
+		],
+		"messages": [{"role": "user", "content": "hello <world> & fun"}]
+	}`)
+	wantFixedBody := []byte(`{
+		"b_key": "val",
+		"a_key": "val",
+		"tools": [
+			{
+				"name": "Artifact",
+				"description": "Writes files with <tags> & &amp; entities",
+				"input_schema": {
+					"type": "object",
+					"properties": {
+						"content": {"type": "string", "pattern": "^[^\\u0000]*$"}
+					}
+				}
+			}
+		],
+		"messages": [{"role": "user", "content": "hello <world> & fun"}]
+	}`)
+
+	gotFixed := deepseekToolPatterns(p, provider.Anthropic, fixedBodyInput)
+	if !bytes.Equal(gotFixed, wantFixedBody) {
+		t.Fatalf("fixed body differed by more than the pattern:\ngot : %s\nwant: %s", gotFixed, wantFixedBody)
+	}
+}
+
 func TestDeepSeekToolPatternsResponsesAndInvalidBodies(t *testing.T) {
 	input := []byte(`{"id":9007199254740993,"tools":[{"type":"function","name":"Artifact","parameters":{"$defs":{"content":{"pattern":"^[^\\0]*$"}},"properties":{"value":{"items":{"pattern":"\\0"}}}}}]}`)
 	p := provider.Provider{Preset: "deepseek"}
