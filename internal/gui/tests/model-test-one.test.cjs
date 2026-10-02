@@ -55,7 +55,7 @@ const words = {
   },
   zh: {
     item: "测试此模型", all: "测试模型",
-    bad: "anthropic/claude-opus-4.5 没有响应：404 · no such model", ok: "gpt-5.1 在 123 ms内响应", okTitle: "123 ms内响应",
+    bad: "anthropic/claude-opus-4.5 没有响应：404 · no such model", ok: "gpt-5.1 在 123 毫秒内响应", okTitle: "123 毫秒内响应",
     tip: "右键可单独测试这个模型",
   },
 };
@@ -140,7 +140,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       const missing = await page.evaluate(() => [
         "Test this model", "Right-click to test just this model", "Right-click a model to test just it",
-        "{model} answered in {ms} ms", "{model} didn't answer: {error}",
+        "{model} answered in {took}", "{model} didn't answer: {error}",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");
       assert.deepEqual(errors, []);

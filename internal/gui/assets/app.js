@@ -9180,8 +9180,7 @@ function renderUsage() {
       // how long the streamed replies took to begin, and how fast they
       // wrote after (#196)
       if (g.timed) {
-        const ms = Math.round(g.ttft_ms / g.timed);
-        sub.push(t("TTFT {ms}", { ms: ms < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(1) }) }));
+        sub.push(t("TTFT {ms}", { ms: ledTook(Math.round(g.ttft_ms / g.timed)) }));
         if (g.decode_ms > 0) sub.push(t("{n} tok/s", { n: Math.round(g.decode_out / (g.decode_ms / 1000)) }));
       }
       who.append(el("div", "sub", sub.join(" · ")));
