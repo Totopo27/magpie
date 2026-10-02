@@ -22,6 +22,8 @@ const relay = {
 };
 const answer = (id) => id.startsWith("anthropic/")
   ? { ok: false, status: 404, error: "no such model", model: id }
+  : id === "model-b"
+  ? { ok: true, ms: 1234, model: id }
   : { ok: true, ms: 123, model: id };
 
 function serve(lang, tests) {
@@ -51,11 +53,13 @@ const words = {
   en: {
     item: "Test this model", all: "Test models",
     bad: "anthropic/claude-opus-4.5 didn't answer: 404 · no such model", ok: "gpt-5.1 answered in 123 ms", okTitle: "Answered in 123 ms",
+    okSeconds: "model-b answered in 1.2 s", okSecondsTitle: "Answered in 1.2 s",
     tip: "Right-click to test just this model",
   },
   zh: {
     item: "测试此模型", all: "测试模型",
     bad: "anthropic/claude-opus-4.5 没有响应：404 · no such model", ok: "gpt-5.1 在 123 毫秒内响应", okTitle: "123 毫秒内响应",
+    okSeconds: "model-b 在 1.2 秒内响应", okSecondsTitle: "1.2 秒内响应",
     tip: "右键可单独测试这个模型",
   },
 };
@@ -123,6 +127,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await chip("anthropic/claude-opus-4.5").locator(".tdot.bad").count(), 1, "the first model's result is kept");
       assert.equal(await page.locator("#status").textContent(), w.ok);
 
+      // a model taking over 1s formats in seconds
+      sent = await tryOne("model-b");
+      assert.deepEqual(sent, { id: "relay", test: ["model-b"] });
+      await chip("model-b").locator(".tdot.ok").waitFor();
+      assert((await chip("model-b").getAttribute("title")).startsWith(w.okSecondsTitle));
+      assert.equal(await page.locator("#status").textContent(), w.okSeconds);
+
       // Esc closes the menu, nothing sent
       await chip("model-c").click({ button: "right" });
       await menu.waitFor();
@@ -140,7 +151,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       const missing = await page.evaluate(() => [
         "Test this model", "Right-click to test just this model", "Right-click a model to test just it",
-        "{model} answered in {took}", "{model} didn't answer: {error}",
+        "{model} answered in {took}", "{model} didn't answer: {error}", "Answered in {took}",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");
       assert.deepEqual(errors, []);
