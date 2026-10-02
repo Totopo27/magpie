@@ -117,8 +117,6 @@ func TestCodexCCSwitchOfficialOpenAIMirror(t *testing.T) {
 	const ccSwitchOfficialMirror = "model_provider = \"custom\"\nmodel = \"gpt-5.4\"\n\n" +
 		"[model_providers.custom]\nname = \"OpenAI\"\nrequires_openai_auth = true\nsupports_websockets = true\nwire_api = \"responses\"\n"
 
-	// 1. Grouped under OpenAI, while a real relay is grouped under its provider id
-	home, _ := codexHome(t, "", ccSwitchOfficialMirror)
 	writeCache := func(h string) {
 		dir := filepath.Join(h, ".codex")
 		os.MkdirAll(dir, 0o755)
@@ -126,6 +124,9 @@ func TestCodexCCSwitchOfficialOpenAIMirror(t *testing.T) {
 			{"slug":"gpt-5.4","display_name":"5.4","priority":1},
 			{"slug":"gpt-5.5","display_name":"5.5","priority":2}]}`), 0o644)
 	}
+
+	// 1. Grouped under OpenAI, while custom tables that differ stay in their own group
+	home, _ := codexHome(t, "", ccSwitchOfficialMirror)
 	writeCache(home)
 	cx := codex(home)
 	opts := cx.Fields[0].Options(nil)
@@ -141,7 +142,25 @@ func TestCodexCCSwitchOfficialOpenAIMirror(t *testing.T) {
 		t.Fatalf("relay grouped under %q, want custom", optsRelay[0].Group)
 	}
 
-	// 2. Account failover works on the official mirror
+	// A table named "OpenAI" with a base_url is a relay, not the official mirror
+	const relayNamedOpenAI = "model_provider = \"custom\"\nmodel = \"gpt-5.4\"\n\n" +
+		"[model_providers.custom]\nname = \"OpenAI\"\nbase_url = \"https://relay.example/v1\"\nrequires_openai_auth = true\n"
+	homeRelayName, _ := codexHome(t, "", relayNamedOpenAI)
+	writeCache(homeRelayName)
+	if opts := codex(homeRelayName).Fields[0].Options(nil); len(opts) == 0 || opts[0].Group != "custom" {
+		t.Fatalf("relay with base_url grouped under %q, want custom", opts[0].Group)
+	}
+
+	// A table with no base_url but name != "OpenAI" is left alone
+	const customOtherName = "model_provider = \"custom\"\nmodel = \"gpt-5.4\"\n\n" +
+		"[model_providers.custom]\nname = \"MyCustom\"\nrequires_openai_auth = true\n"
+	homeOther, _ := codexHome(t, "", customOtherName)
+	writeCache(homeOther)
+	if opts := codex(homeOther).Fields[0].Options(nil); len(opts) == 0 || opts[0].Group != "custom" {
+		t.Fatalf("other custom name grouped under %q, want custom", opts[0].Group)
+	}
+
+	// 2. Account failover points the mirror table's base_url at magpie, not openai_base_url
 	claims := func(m map[string]any) string {
 		b, _ := json.Marshal(m)
 		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
@@ -154,6 +173,7 @@ func TestCodexCCSwitchOfficialOpenAIMirror(t *testing.T) {
 	}
 	me, _ := json.Marshal(auth("me@example.com", "acct-1"))
 	homeFailover, readFailover := codexHome(t, string(me), ccSwitchOfficialMirror)
+	pathFailover := filepath.Join(homeFailover, ".codex", "config.toml")
 	cxFailover := codex(homeFailover)
 	logins := func(on bool) {
 		b, _ := json.Marshal([]map[string]any{{"agent": "codex", "user": "spare@example.com", "on": on,
@@ -165,25 +185,40 @@ func TestCodexCCSwitchOfficialOpenAIMirror(t *testing.T) {
 	if err := cxFailover.Sync(); err != nil {
 		t.Fatal(err)
 	}
-	if cfg := readFailover(); !strings.Contains(cfg, `openai_base_url = "http://127.0.0.1:`) {
-		t.Fatalf("failover on did not set base url:\n%s", cfg)
+	tb, err := edit.GetTOMLTable(pathFailover, "model_providers.custom")
+	if err != nil {
+		t.Fatal(err)
 	}
+	codexURL := here(homeFailover).codexURL()
+	if tb["base_url"] != codexURL {
+		t.Fatalf("mirror table base_url = %q, want %q", tb["base_url"], codexURL)
+	}
+	if strings.Contains(readFailover(), "openai_base_url") {
+		t.Fatalf("mirror failover wrote openai_base_url:\n%s", readFailover())
+	}
+
+	// When failover turns off, base_url is removed and the file is byte-identical to original
 	logins(false)
 	if err := cxFailover.Sync(); err != nil {
 		t.Fatal(err)
 	}
-	if cfg := readFailover(); strings.Contains(cfg, "openai_base_url") {
-		t.Fatalf("failover off left base url:\n%s", cfg)
+	if got := readFailover(); got != ccSwitchOfficialMirror {
+		t.Fatalf("failover off left config not byte-identical:\ngot:\n%s\nwant:\n%s", got, ccSwitchOfficialMirror)
 	}
 
-	// But a real relay with a base_url never gets pointed at magpie gateway for failover
+	// Real relays with a base_url never get pointed at magpie gateway for failover
 	homeRelayFailover, readRelayFailover := codexHome(t, string(me), ccSwitchCodex)
 	cxRelayFailover := codex(homeRelayFailover)
+	pathRelay := filepath.Join(homeRelayFailover, ".codex", "config.toml")
 	logins(true)
 	if err := cxRelayFailover.Sync(); err != nil {
 		t.Fatal(err)
 	}
-	if cfg := readRelayFailover(); strings.Contains(cfg, "openai_base_url") {
-		t.Fatalf("real relay got openai_base_url:\n%s", cfg)
+	tbRelay, _ := edit.GetTOMLTable(pathRelay, "model_providers.custom")
+	if tbRelay["base_url"] != "https://relay.example/v1" {
+		t.Fatalf("relay base_url changed to %q", tbRelay["base_url"])
+	}
+	if strings.Contains(readRelayFailover(), "openai_base_url") {
+		t.Fatalf("real relay got openai_base_url:\n%s", readRelayFailover())
 	}
 }
