@@ -241,3 +241,23 @@ func TestDeepSeekToolPatternsSpecialPropertyNames(t *testing.T) {
 		t.Fatalf("special property names not preserved byte-for-byte:\ngot : %s\nwant: %s", got, want)
 	}
 }
+
+func TestDeepSeekToolPatternsPreservesCallerSpareCapacity(t *testing.T) {
+	p := provider.Provider{Preset: "deepseek"}
+	src := []byte(`{"tools":[{"name":"Artifact","input_schema":{"pattern":"^[^\\0]*$"}}]}`)
+
+	// Allocate a slice with extra capacity, typical of io.ReadAll or append
+	body := make([]byte, len(src), len(src)+4096)
+	copy(body, src)
+
+	out := deepseekToolPatterns(p, provider.Anthropic, body)
+	if bytes.Equal(body, out) {
+		t.Fatal("expected body and out to differ")
+	}
+	if !bytes.Equal(body, src) {
+		t.Fatalf("caller's body slice was mutated in-place:\ngot : %s\nwant: %s", body, src)
+	}
+	if !bytes.Contains(out, []byte(`\\u0000`)) {
+		t.Fatalf("output does not contain normalized pattern: %s", out)
+	}
+}

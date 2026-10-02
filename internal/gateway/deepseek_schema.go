@@ -37,21 +37,23 @@ func deepseekToolPatterns(p provider.Provider, to provider.Protocol, body []byte
 		return body
 	}
 
-	// Sort targets in descending order of Index so we splice from back to front
-	// without invalidating preceding byte offsets.
+	// Sort targets ascending by Index so we can copy cleanly forward into a
+	// new buffer without modifying the caller's slice or its backing array.
 	sort.Slice(targets, func(i, j int) bool {
-		return targets[i].index > targets[j].index
+		return targets[i].index < targets[j].index
 	})
 
-	out := body
+	out := make([]byte, 0, len(body)+6*len(targets))
+	last := 0
 	for _, t := range targets {
-		if t.index <= 0 || t.index+t.rawLen > len(out) {
+		if t.index < last || t.index+t.rawLen > len(body) {
 			continue
 		}
-		newBytes := []byte(t.replacement)
-		tail := append(newBytes, out[t.index+t.rawLen:]...)
-		out = append(out[:t.index], tail...)
+		out = append(out, body[last:t.index]...)
+		out = append(out, t.replacement...)
+		last = t.index + t.rawLen
 	}
+	out = append(out, body[last:]...)
 	return out
 }
 
