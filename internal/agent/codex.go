@@ -245,6 +245,19 @@ func codexIn(at place) *Agent {
 		}
 		return nil
 	}
+	// isOfficial reports whether Codex is on its built-in OpenAI provider:
+	// unset, "openai", or a mirror table without a base_url (as CC Switch
+	// writes it: name = "OpenAI", requires_openai_auth = true).
+	isOfficial := func(p string) bool {
+		if p == "" || p == "openai" {
+			return true
+		}
+		if p == magpieID {
+			return false
+		}
+		t, err := edit.GetTOMLTable(path, "model_providers."+p)
+		return err == nil && t["base_url"] == "" && (t["name"] == "OpenAI" || t["requires_openai_auth"] == "true")
+	}
 	// Codex on one of its own models goes through magpie too while more of
 	// its ChatGPT accounts are on there, so one out of its allowance hands
 	// the turn to the next; with none, it goes straight to OpenAI again
@@ -252,7 +265,7 @@ func codexIn(at place) *Agent {
 		if isMagpie(get("model")) || asProvider() {
 			return nil
 		}
-		if p := get("model_provider"); p != "" && p != "openai" {
+		if p := get("model_provider"); !isOfficial(p) {
 			return nil
 		}
 		on := codexFailover()
@@ -266,7 +279,7 @@ func codexIn(at place) *Agent {
 	}
 	modelOptions := func(withMagpie bool) []Option {
 		var own []Option
-		if p := get("model_provider"); p != "" && p != magpieID {
+		if p := get("model_provider"); !isOfficial(p) {
 			own = group(p, options(catalog.Codex(), ""))
 		} else {
 			own = group("OpenAI", options(ownCodex(), ""))

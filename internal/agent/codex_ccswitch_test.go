@@ -1,12 +1,16 @@
 package agent
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // CC Switch's Codex config, as it writes it: its "custom" table, one of
@@ -102,5 +106,84 @@ func TestCodexKeepsHandPointedCCSwitchTable(t *testing.T) {
 	}
 	if !strings.Contains(read(), `base_url = "`+v1+`"`) {
 		t.Fatalf("\n%s", read())
+	}
+}
+
+// CC Switch's official OpenAI provider mirror writes model_provider = "custom"
+// and a [model_providers.custom] table with name = "OpenAI", requires_openai_auth = true
+// and no base_url (#504): it is the official provider, so its models are grouped
+// under OpenAI and failover moves Codex onto magpie while another account is on.
+func TestCodexCCSwitchOfficialOpenAIMirror(t *testing.T) {
+	const ccSwitchOfficialMirror = "model_provider = \"custom\"\nmodel = \"gpt-5.4\"\n\n" +
+		"[model_providers.custom]\nname = \"OpenAI\"\nrequires_openai_auth = true\nsupports_websockets = true\nwire_api = \"responses\"\n"
+
+	// 1. Grouped under OpenAI, while a real relay is grouped under its provider id
+	home, _ := codexHome(t, "", ccSwitchOfficialMirror)
+	writeCache := func(h string) {
+		dir := filepath.Join(h, ".codex")
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "models_cache.json"), []byte(`{"models":[
+			{"slug":"gpt-5.4","display_name":"5.4","priority":1},
+			{"slug":"gpt-5.5","display_name":"5.5","priority":2}]}`), 0o644)
+	}
+	writeCache(home)
+	cx := codex(home)
+	opts := cx.Fields[0].Options(nil)
+	if len(opts) == 0 || opts[0].Group != "OpenAI" {
+		t.Fatalf("mirror grouped under %q, want OpenAI", opts[0].Group)
+	}
+
+	homeRelay, _ := codexHome(t, "", ccSwitchCodex)
+	writeCache(homeRelay)
+	cxRelay := codex(homeRelay)
+	optsRelay := cxRelay.Fields[0].Options(nil)
+	if len(optsRelay) == 0 || optsRelay[0].Group != "custom" {
+		t.Fatalf("relay grouped under %q, want custom", optsRelay[0].Group)
+	}
+
+	// 2. Account failover works on the official mirror
+	claims := func(m map[string]any) string {
+		b, _ := json.Marshal(m)
+		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
+	}
+	auth := func(email, acct string) map[string]any {
+		return map[string]any{"auth_mode": "chatgpt", "tokens": map[string]any{
+			"id_token":      claims(map[string]any{"email": email}),
+			"access_token":  claims(map[string]any{"exp": time.Now().Add(time.Hour).Unix()}),
+			"refresh_token": "r-" + acct, "account_id": acct}}
+	}
+	me, _ := json.Marshal(auth("me@example.com", "acct-1"))
+	homeFailover, readFailover := codexHome(t, string(me), ccSwitchOfficialMirror)
+	cxFailover := codex(homeFailover)
+	logins := func(on bool) {
+		b, _ := json.Marshal([]map[string]any{{"agent": "codex", "user": "spare@example.com", "on": on,
+			"seen": time.Now(), "auth": auth("spare@example.com", "acct-2")}})
+		os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
+		os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), b, 0o600)
+	}
+	logins(true)
+	if err := cxFailover.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := readFailover(); !strings.Contains(cfg, `openai_base_url = "http://127.0.0.1:`) {
+		t.Fatalf("failover on did not set base url:\n%s", cfg)
+	}
+	logins(false)
+	if err := cxFailover.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := readFailover(); strings.Contains(cfg, "openai_base_url") {
+		t.Fatalf("failover off left base url:\n%s", cfg)
+	}
+
+	// But a real relay with a base_url never gets pointed at magpie gateway for failover
+	homeRelayFailover, readRelayFailover := codexHome(t, string(me), ccSwitchCodex)
+	cxRelayFailover := codex(homeRelayFailover)
+	logins(true)
+	if err := cxRelayFailover.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := readRelayFailover(); strings.Contains(cfg, "openai_base_url") {
+		t.Fatalf("real relay got openai_base_url:\n%s", cfg)
 	}
 }
