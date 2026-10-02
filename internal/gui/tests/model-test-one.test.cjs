@@ -55,7 +55,7 @@ const words = {
   },
   zh: {
     item: "测试此模型", all: "测试模型",
-    bad: "anthropic/claude-opus-4.5 没有响应：404 · no such model", ok: "gpt-5.1 在 123 毫秒内响应", okTitle: "123 毫秒内响应",
+    bad: "anthropic/claude-opus-4.5 没有响应：404 · no such model", ok: "gpt-5.1 在 123 ms内响应", okTitle: "123 ms内响应",
     tip: "右键可单独测试这个模型",
   },
 };
