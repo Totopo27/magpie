@@ -3,11 +3,11 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"strconv"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -17,7 +17,8 @@ import (
 //
 // To avoid re-encoding the entire payload or tool array (which reorders keys,
 // escapes <, > and &, and breaks prompt caching), it finds only the offending
-// "pattern" fields in tool schemas using gjson and updates them in place using sjson.
+// "pattern" fields in tool schemas using gjson and splices the normalized string
+// literals in place from the end of the body backwards.
 func deepseekToolPatterns(p provider.Provider, to provider.Protocol, body []byte) []byte {
 	if p.Preset != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" {
 		return body
@@ -31,58 +32,51 @@ func deepseekToolPatterns(p provider.Provider, to provider.Protocol, body []byte
 	}
 
 	var targets []patternTarget
-	collectNullPatterns(toolsRes, "tools", false, &targets)
+	collectNullPatterns(toolsRes, false, &targets)
 	if len(targets) == 0 {
 		return body
 	}
 
+	// Sort targets in descending order of Index so we splice from back to front
+	// without invalidating preceding byte offsets.
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i].index > targets[j].index
+	})
+
 	out := body
 	for _, t := range targets {
-		var err error
-		out, err = sjson.SetBytes(out, t.path, t.norm)
-		if err != nil {
-			return body
+		if t.index <= 0 || t.index+t.rawLen > len(out) {
+			continue
 		}
+		newBytes := []byte(t.replacement)
+		tail := append(newBytes, out[t.index+t.rawLen:]...)
+		out = append(out[:t.index], tail...)
 	}
 	return out
 }
 
 type patternTarget struct {
-	path string
-	norm string
+	index       int
+	rawLen      int
+	replacement string
 }
 
-func escapePathKey(k string) string {
-	var b strings.Builder
-	for _, r := range k {
-		if r == '.' || r == '*' || r == '?' {
-			b.WriteByte('\\')
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
-
-func collectNullPatterns(node gjson.Result, pathPrefix string, inSchema bool, targets *[]patternTarget) {
+func collectNullPatterns(node gjson.Result, inSchema bool, targets *[]patternTarget) {
 	if !node.Exists() {
 		return
 	}
 	if node.IsObject() {
 		node.ForEach(func(key, value gjson.Result) bool {
 			k := key.String()
-			childPath := escapePathKey(k)
-			if pathPrefix != "" {
-				childPath = pathPrefix + "." + childPath
-			}
-
 			if inSchema {
-				if k == "pattern" && value.Type == gjson.String {
+				if k == "pattern" && value.Type == gjson.String && value.Index > 0 {
 					var pattern string
 					if err := json.Unmarshal([]byte(value.Raw), &pattern); err == nil {
 						if norm := unicodeNullEscape(pattern); norm != pattern {
 							*targets = append(*targets, patternTarget{
-								path: childPath,
-								norm: norm,
+								index:       value.Index,
+								rawLen:      len(value.Raw),
+								replacement: encodeJSONStringNoHTMLEscape(norm),
 							})
 						}
 					}
@@ -90,32 +84,56 @@ func collectNullPatterns(node gjson.Result, pathPrefix string, inSchema bool, ta
 				switch k {
 				case "properties", "$defs", "definitions", "dependentSchemas", "patternProperties":
 					if value.IsObject() {
-						value.ForEach(func(propKey, schema gjson.Result) bool {
-							collectNullPatterns(schema, childPath+"."+escapePathKey(propKey.String()), true, targets)
+						value.ForEach(func(_, schema gjson.Result) bool {
+							collectNullPatterns(schema, true, targets)
 							return true
 						})
 					}
 				case "items", "additionalProperties", "contains", "propertyNames", "not", "if", "then", "else", "allOf", "anyOf", "oneOf", "prefixItems", "unevaluatedProperties", "unevaluatedItems", "contentSchema":
-					collectNullPatterns(value, childPath, true, targets)
+					collectNullPatterns(value, true, targets)
 				}
 			} else {
 				if k == "input_schema" || k == "parameters" {
-					collectNullPatterns(value, childPath, true, targets)
+					collectNullPatterns(value, true, targets)
 				} else if k == "function" {
-					collectNullPatterns(value, childPath, false, targets)
+					collectNullPatterns(value, false, targets)
 				}
 			}
 			return true
 		})
 	} else if node.IsArray() {
-		idx := 0
 		node.ForEach(func(_, item gjson.Result) bool {
-			childPath := pathPrefix + "." + strconv.Itoa(idx)
-			collectNullPatterns(item, childPath, inSchema, targets)
-			idx++
+			collectNullPatterns(item, inSchema, targets)
 			return true
 		})
 	}
+}
+
+func encodeJSONStringNoHTMLEscape(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < 0x20 {
+				fmt.Fprintf(&b, `\u%04x`, r)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 func unicodeNullEscape(pattern string) string {

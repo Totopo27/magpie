@@ -174,3 +174,70 @@ func TestDeepSeekForwardNormalizesArtifact(t *testing.T) {
 		t.Fatalf("forwardOnce did not normalize pattern: %s", captured)
 	}
 }
+
+func TestDeepSeekToolPatternsSpecialPropertyNames(t *testing.T) {
+	p := provider.Provider{Preset: "deepseek"}
+	// Test special property names like a\b, :x, @prefix, |pipe
+	input := []byte(`{
+		"tools": [
+			{
+				"name": "SpecialTools",
+				"input_schema": {
+					"type": "object",
+					"properties": {
+						"a\\b": {
+							"type": "string",
+							"pattern": "^[^\\0]*$"
+						},
+						":x": {
+							"type": "string",
+							"pattern": "\\0"
+						},
+						"@special": {
+							"type": "string",
+							"pattern": "\\0"
+						},
+						"a|b": {
+							"type": "string",
+							"pattern": "\\0"
+						}
+					}
+				}
+			}
+		]
+	}`)
+
+	want := []byte(`{
+		"tools": [
+			{
+				"name": "SpecialTools",
+				"input_schema": {
+					"type": "object",
+					"properties": {
+						"a\\b": {
+							"type": "string",
+							"pattern": "^[^\\u0000]*$"
+						},
+						":x": {
+							"type": "string",
+							"pattern": "\\u0000"
+						},
+						"@special": {
+							"type": "string",
+							"pattern": "\\u0000"
+						},
+						"a|b": {
+							"type": "string",
+							"pattern": "\\u0000"
+						}
+					}
+				}
+			}
+		]
+	}`)
+
+	got := deepseekToolPatterns(p, provider.Anthropic, input)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("special property names not preserved byte-for-byte:\ngot : %s\nwant: %s", got, want)
+	}
+}
