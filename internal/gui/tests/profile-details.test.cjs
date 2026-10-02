@@ -147,10 +147,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await detail.waitFor();
         assert.deepEqual(calls, []);
 
-        // Apply applies it, once
+        // Apply applies it, once, and closes the details
         await page.locator(".prof-detail .pd-apply").click();
         await page.waitForFunction(() => /work/.test(document.querySelector(".status")?.textContent || ""));
         assert.deepEqual(calls, ["use work"]);
+        assert.equal(await detail.count(), 0, "Apply closes the details");
         assert.deepEqual(errors, []);
       });
     }

@@ -2506,7 +2506,7 @@ async function profileAction(action, name, update) {
     state = data;
     renderAgents();
     if (action === "use") {
-      profileOpen = null;
+      closeProfileDetail();
       closeProfiles(); // the agents, as they are now, in sight
       let msg = t(data.changed === 1 ? "{name} applied · {n} setting changed" : "{name} applied · {n} settings changed", { name, n: data.changed });
       const lib = data.library;
