@@ -221,4 +221,40 @@ func TestCodexCCSwitchOfficialOpenAIMirror(t *testing.T) {
 	if strings.Contains(readRelayFailover(), "openai_base_url") {
 		t.Fatalf("real relay got openai_base_url:\n%s", readRelayFailover())
 	}
+
+	// Switching to a relay while failover was active on the mirror clears the marker
+	// without deleting the relay's own base_url on Sync or Set.
+	homeSwitch, readSwitch := codexHome(t, string(me), ccSwitchOfficialMirror)
+	cxSwitch := codex(homeSwitch)
+	pathSwitch := filepath.Join(homeSwitch, ".codex", "config.toml")
+	logins(true)
+	if err := cxSwitch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	// Verify mirror failover was activated and marker was set
+	tbSwitch, _ := edit.GetTOMLTable(pathSwitch, "model_providers.custom")
+	if tbSwitch["base_url"] != here(homeSwitch).codexURL() {
+		t.Fatalf("mirror base_url = %q, want codexURL", tbSwitch["base_url"])
+	}
+	// User switches CC Switch to a relay, reusing the custom table
+	if err := os.WriteFile(pathSwitch, []byte(ccSwitchCodex), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cxSwitch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	// The relay's own base_url must survive Sync and subsequent model sets
+	tbAfterSync, _ := edit.GetTOMLTable(pathSwitch, "model_providers.custom")
+	if tbAfterSync["base_url"] != "https://relay.example/v1" {
+		t.Fatalf("relay base_url after Sync = %q, want https://relay.example/v1", tbAfterSync["base_url"])
+	}
+	modelField := cxSwitch.Fields[0]
+	if err := modelField.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	tbAfterSetEmpty, _ := edit.GetTOMLTable(pathSwitch, "model_providers.custom")
+	if tbAfterSetEmpty["base_url"] != "https://relay.example/v1" {
+		t.Fatalf("relay base_url after Set(\"\") = %q, want https://relay.example/v1", tbAfterSetEmpty["base_url"])
+	}
+	_ = readSwitch
 }

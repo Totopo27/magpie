@@ -218,6 +218,18 @@ func codexIn(at place) *Agent {
 		}
 		return edit.DelTOMLTop(path, "openai_base_url")
 	}
+	dropMirrorFailover := func() error {
+		p := stashLoad()[at.key("codex.mirror_failover")]
+		if p == "" {
+			return nil
+		}
+		forget(at.key("codex.mirror_failover"))
+		t, _ := edit.GetTOMLTable(path, "model_providers."+p)
+		if t["base_url"] == at.codexURL() {
+			return edit.DelTOMLKey(path, "model_providers."+p, "base_url")
+		}
+		return nil
+	}
 	// the model spawned subagents start on, when not the parent's; one of
 	// magpie's goes when magpie steps out, as Codex could no longer find it
 	subagent := func() (string, error) {
@@ -268,6 +280,9 @@ func codexIn(at place) *Agent {
 		}
 		p := get("model_provider")
 		mirror := isCCSwitchMirror(p)
+		if !mirror {
+			_ = dropMirrorFailover()
+		}
 		if p != "" && p != "openai" && !mirror {
 			return nil
 		}
@@ -317,9 +332,8 @@ func codexIn(at place) *Agent {
 			if err := giveTables(); err != nil {
 				return err
 			}
-			if p := stashLoad()[at.key("codex.mirror_failover")]; p != "" {
-				_ = edit.DelTOMLKey(path, "model_providers."+p, "base_url")
-				forget(at.key("codex.mirror_failover"))
+			if err := dropMirrorFailover(); err != nil {
+				return err
 			}
 			// Codex as installed: OpenAI, its own catalog, its default model
 			if err := dropBase(); err != nil {
@@ -333,9 +347,8 @@ func codexIn(at place) *Agent {
 			return nil
 		}
 		if isMagpie(v) {
-			if p := stashLoad()[at.key("codex.mirror_failover")]; p != "" {
-				_ = edit.DelTOMLKey(path, "model_providers."+p, "base_url")
-				forget(at.key("codex.mirror_failover"))
+			if err := dropMirrorFailover(); err != nil {
+				return err
 			}
 			if !routed() {
 				stash(map[string]string{at.key("codex.model"): get("model"), at.key("codex.effort"): get("model_reasoning_effort"),
