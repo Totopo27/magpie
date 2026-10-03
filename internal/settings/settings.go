@@ -100,6 +100,10 @@ type Settings struct {
 	// with CodexWarmup or without it. ClaudeWarmAt is the Claude accounts'.
 	CodexWarmAt  string `json:"codexWarmAt,omitempty"`
 	ClaudeWarmAt string `json:"claudeWarmAt,omitempty"`
+	// ClaudePassthrough lets Claude Code use its own OAuth sign-in for Anthropic
+	// models while routed through magpie, omitting ANTHROPIC_AUTH_TOKEN so
+	// Claude Code keeps its subscription and session history (#455).
+	ClaudePassthrough bool `json:"claudePassthrough,omitempty"`
 	// CodexAutoReset are the ChatGPT accounts (lower-case) that spend one
 	// of their rate-limit resets by themselves once their weekly window is
 	// used up and no other account can take the request: at most one a

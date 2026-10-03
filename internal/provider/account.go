@@ -351,18 +351,6 @@ func claudeCredentialsPath() string {
 	return filepath.Join(dir, ".credentials.json")
 }
 
-// ClaudeHasAccount reports whether Claude Code has a local OAuth sign-in.
-func ClaudeHasAccount() bool {
-	c, _, ok := readClaudeCredential()
-	if !ok || c.OAuth.AccessToken == "" {
-		return false
-	}
-	if c.OAuth.ExpiresAt > 0 && time.Now().Unix() >= c.OAuth.ExpiresAt {
-		return false
-	}
-	return true
-}
-
 func readClaudeCredential() (claudeCredentials, claudeCredentialLocation, bool) {
 	path := claudeCredentialsPath()
 	if b, err := os.ReadFile(path); err == nil {

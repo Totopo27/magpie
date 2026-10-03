@@ -16,6 +16,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Claude Code reads its endpoint from the `env` block of settings.json.
@@ -478,13 +479,14 @@ func claudeIn(at place) *Agent {
 		for t, v := range tiers {
 			tiers[t] = mark(v)
 		}
+		passthrough := at.id == "" && settings.Load().ClaudePassthrough
 		kvs := []edit.KV{
 			{Path: "env.ANTHROPIC_BASE_URL", Value: at.gw()},
 			{Path: "env.ANTHROPIC_MODEL", Value: main},
 			{Path: "env.ANTHROPIC_SMALL_FAST_MODEL", Value: tiers["haiku"]},
 			{Path: "model", Value: main},
 		}
-		if !provider.ClaudeHasAccount() {
+		if !passthrough {
 			kvs = append(kvs, edit.KV{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: gateway.Token})
 		} else {
 			_ = edit.DelJSON(path, "env.ANTHROPIC_AUTH_TOKEN")
@@ -787,6 +789,40 @@ func claudeIn(at place) *Agent {
 		fields = append(fields, effortField(tier+"_effort", tier+" effort", tier, at, put))
 	}
 	fields = append(fields, effortField("subagent_effort", "subagent effort", "its subagents", subagentAt, setSubagent))
+	if at.id == "" {
+		fields = append(fields, Field{
+			Key: "passthrough", Label: "passthrough", Quiet: true,
+			Get: func() string {
+				if settings.Load().ClaudePassthrough {
+					return "on"
+				}
+				return ""
+			},
+			Set: func(v string) error {
+				s := settings.Load()
+				switch v {
+				case "", "off":
+					s.ClaudePassthrough = false
+				case "on":
+					s.ClaudePassthrough = true
+				default:
+					return fmt.Errorf("passthrough is on or off, not %q", v)
+				}
+				if err := settings.Save(s); err != nil {
+					return err
+				}
+				if m := get(); isMagpie(m) {
+					return set(m)
+				}
+				return nil
+			},
+			Options: func(map[string]string) []Option {
+				return []Option{
+					{Value: "on", Note: "use Claude Code's own sign-in for Anthropic models"},
+				}
+			},
+		})
+	}
 
 	return &Agent{
 		ID: "claude", Name: "Claude Code", Icon: "claudecode-color", Aliases: []string{"cc", "claude-code"},
@@ -835,7 +871,7 @@ func claudeIn(at place) *Agent {
 			if u, _ := edit.GetJSON(managed, "env.ANTHROPIC_BASE_URL"); u != "" && u != at.gw() {
 				return "Claude Code's managed settings (" + at.native(managed) + ") set ANTHROPIC_BASE_URL to " + u + ", which wins over magpie's"
 			}
-			if provider.ClaudeHasAccount() {
+			if at.id == "" && settings.Load().ClaudePassthrough {
 				return wiringOff("Claude Code", path, func(k string) (string, bool) { return edit.GetJSON(path, "env."+k) },
 					"ANTHROPIC_BASE_URL", at.gw())
 			}

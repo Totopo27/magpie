@@ -731,13 +731,13 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Anthropic, 400, err.Error())
 		return
 	}
-	// Count the same masked prompt that generation sends to the vendor.
-	w, body, unmask := redacted(w, body)
-	defer unmask()
-	if isClaudeOAuth(r) && isNativeAnthropicModel(model) {
+	if isClaudePassthrough(r, model) {
 		s.claudeUpstream(w, r, r.URL.Path, body)
 		return
 	}
+	// Count the same masked prompt that generation sends to the vendor.
+	w, body, unmask := redacted(w, body)
+	defer unmask()
 	if m := claudeTierStandIn(agentOf(r), model); m != "" {
 		model = m // counted on the model the request will go to
 	}
@@ -865,9 +865,9 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		if from == provider.Chat {
 			body = thinkingEffort(body)
 		}
-		if from == provider.Anthropic && isClaudeOAuth(r) {
+		if from == provider.Anthropic {
 			model := modelOf(body)
-			if isNativeAnthropicModel(model) {
+			if isClaudePassthrough(r, model) {
 				s.claudeUpstream(w, r, r.URL.Path, body)
 				return
 			}

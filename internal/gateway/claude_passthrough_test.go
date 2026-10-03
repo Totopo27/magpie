@@ -12,7 +12,39 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
+
+func TestClaudePassthroughOffByDefault(t *testing.T) {
+	// Off by default: an OAuth request must NOT pass through to Anthropic upstream.
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("Anthropic upstream should not be called when passthrough is off")
+	}))
+	defer up.Close()
+
+	was := provider.ClaudeBase
+	provider.ClaudeBase = up.URL
+	defer func() { provider.ClaudeBase = was }()
+
+	if err := settings.Save(settings.Settings{ClaudePassthrough: false}); err != nil {
+		t.Fatal(err)
+	}
+	defer settings.Save(settings.Settings{})
+
+	s := New()
+	rec := httptest.NewRecorder()
+	reqBody := `{"model":"claude-opus-5-5","messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer sk-ant-oat01-test-token")
+	req.Header.Set("Content-Type", "application/json")
+
+	s.Handler().ServeHTTP(rec, req)
+
+	// Since passthrough is off and no magpie provider is configured, it fails locally
+	if rec.Code == 200 {
+		t.Fatalf("unexpected success when passthrough is off")
+	}
+}
 
 func TestClaudePassthroughNativeModel(t *testing.T) {
 	var gotPath, gotAuth, gotBeta string
@@ -31,6 +63,11 @@ func TestClaudePassthroughNativeModel(t *testing.T) {
 	was := provider.ClaudeBase
 	provider.ClaudeBase = up.URL
 	defer func() { provider.ClaudeBase = was }()
+
+	if err := settings.Save(settings.Settings{ClaudePassthrough: true}); err != nil {
+		t.Fatal(err)
+	}
+	defer settings.Save(settings.Settings{})
 
 	s := New()
 	rec := httptest.NewRecorder()
@@ -62,11 +99,119 @@ func TestClaudePassthroughNativeModel(t *testing.T) {
 	}
 }
 
+func TestClaudePassthroughNonClaudeModel(t *testing.T) {
+	// A bare model id that is not in the Claude family (e.g. gpt-5.5) must NOT pass through to Anthropic.
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("Anthropic upstream should not be called for non-Claude model gpt-5.5")
+	}))
+	defer up.Close()
+
+	was := provider.ClaudeBase
+	provider.ClaudeBase = up.URL
+	defer func() { provider.ClaudeBase = was }()
+
+	if err := settings.Save(settings.Settings{ClaudePassthrough: true}); err != nil {
+		t.Fatal(err)
+	}
+	defer settings.Save(settings.Settings{})
+
+	s := New()
+	rec := httptest.NewRecorder()
+	reqBody := `{"model":"gpt-5.5","messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer sk-ant-oat01-test-token")
+	req.Header.Set("Content-Type", "application/json")
+
+	s.Handler().ServeHTTP(rec, req)
+
+	// Since gpt-5.5 is not a Claude family model, it must be handled by Magpie and not sent to Anthropic
+	if rec.Code == 200 {
+		t.Fatalf("unexpected success for gpt-5.5 on unconfigured provider")
+	}
+}
+
+func TestClaudePassthroughMagpieModel(t *testing.T) {
+	// A request asking for a Magpie-served model (provider/model) must NOT pass through to Anthropic.
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("Anthropic upstream should not be called for magpie model")
+	}))
+	defer up.Close()
+
+	was := provider.ClaudeBase
+	provider.ClaudeBase = up.URL
+	defer func() { provider.ClaudeBase = was }()
+
+	if err := settings.Save(settings.Settings{ClaudePassthrough: true}); err != nil {
+		t.Fatal(err)
+	}
+	defer settings.Save(settings.Settings{})
+
+	s := New()
+	rec := httptest.NewRecorder()
+	reqBody := `{"model":"fake/m1","messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer sk-ant-oat01-test-token")
+	req.Header.Set("Content-Type", "application/json")
+
+	s.Handler().ServeHTTP(rec, req)
+
+	if rec.Code == 200 {
+		t.Fatalf("unexpected success for fake/m1 on unconfigured provider")
+	}
+}
+
+func TestClaudePassthroughNoRedaction(t *testing.T) {
+	// When redaction is enabled in Magpie, passthrough requests to the user's
+	// own Claude subscription must NOT have secrets rewritten or masked.
+	var gotBody []byte
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}],"model":"claude-opus-5-5"}`)
+	}))
+	defer up.Close()
+
+	was := provider.ClaudeBase
+	provider.ClaudeBase = up.URL
+	defer func() { provider.ClaudeBase = was }()
+
+	if err := settings.Save(settings.Settings{
+		ClaudePassthrough: true,
+		Redact:            true,
+		RedactPersonal:    true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer settings.Save(settings.Settings{})
+
+	s := New()
+	rec := httptest.NewRecorder()
+	reqBody := `{"model":"claude-opus-5-5","messages":[{"role":"user","content":"my secret is sk-ant-api03-12345678901234567890 and phone 13812345678"}]}`
+	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer sk-ant-oat01-test-token")
+	req.Header.Set("Content-Type", "application/json")
+
+	s.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if strings.Contains(string(gotBody), "{{API_KEY_") || strings.Contains(string(gotBody), "{{PHONE_") {
+		t.Errorf("passthrough request was unexpectedly redacted: %s", string(gotBody))
+	}
+	if !strings.Contains(string(gotBody), "sk-ant-api03-12345678901234567890") {
+		t.Errorf("passthrough body lost original content: %s", string(gotBody))
+	}
+}
+
 func TestClaudePassthroughCountTokens(t *testing.T) {
 	var gotPath, gotAuth string
+	var gotBody []byte
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotAuth = r.Header.Get("Authorization")
+		gotBody, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		io.WriteString(w, `{"input_tokens":12}`)
@@ -77,9 +222,18 @@ func TestClaudePassthroughCountTokens(t *testing.T) {
 	provider.ClaudeBase = up.URL
 	defer func() { provider.ClaudeBase = was }()
 
+	if err := settings.Save(settings.Settings{
+		ClaudePassthrough: true,
+		Redact:            true,
+		RedactPersonal:    true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer settings.Save(settings.Settings{})
+
 	s := New()
 	rec := httptest.NewRecorder()
-	reqBody := `{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"hi"}]}`
+	reqBody := `{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"my key sk-ant-api03-abcdefghij1234567890"}]}`
 	req := httptest.NewRequest("POST", "/v1/messages/count_tokens", strings.NewReader(reqBody))
 	req.Header.Set("Authorization", "Bearer sk-ant-oat01-test-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -95,6 +249,9 @@ func TestClaudePassthroughCountTokens(t *testing.T) {
 	if gotAuth != "Bearer sk-ant-oat01-test-token" {
 		t.Errorf("got auth %q, want Bearer sk-ant-oat01-test-token", gotAuth)
 	}
+	if strings.Contains(string(gotBody), "{{API_KEY_") {
+		t.Errorf("count_tokens was unexpectedly redacted: %s", string(gotBody))
+	}
 	if !strings.Contains(rec.Body.String(), `"input_tokens":12`) {
 		t.Errorf("expected response from upstream, got %s", rec.Body.String())
 	}
@@ -107,6 +264,11 @@ func TestClaudePassthroughModelsList(t *testing.T) {
 	}
 	catalog.Reset()
 	t.Cleanup(catalog.Reset)
+
+	if err := settings.Save(settings.Settings{ClaudePassthrough: true}); err != nil {
+		t.Fatal(err)
+	}
+	defer settings.Save(settings.Settings{})
 
 	s := New()
 	rec := httptest.NewRecorder()
@@ -137,33 +299,5 @@ func TestClaudePassthroughModelsList(t *testing.T) {
 	}
 	if !foundSonnet {
 		t.Errorf("expected claude-sonnet in /v1/models response when asked with sk-ant-oat token")
-	}
-}
-
-func TestClaudePassthroughMagpieModel(t *testing.T) {
-	// A request with sk-ant-oat token asking for a Magpie-served model (provider/model)
-	// must NOT pass through to Anthropic; it must be handled by Magpie's serve logic.
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("Anthropic upstream should not be called for magpie model")
-	}))
-	defer up.Close()
-
-	was := provider.ClaudeBase
-	provider.ClaudeBase = up.URL
-	defer func() { provider.ClaudeBase = was }()
-
-	s := New()
-	rec := httptest.NewRecorder()
-	reqBody := `{"model":"fake/m1","messages":[{"role":"user","content":"hi"}]}`
-	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(reqBody))
-	req.Header.Set("Authorization", "Bearer sk-ant-oat01-test-token")
-	req.Header.Set("Content-Type", "application/json")
-
-	s.Handler().ServeHTTP(rec, req)
-
-	// Since fake/m1 is not configured in this test, it should be turned away or fail locally in Magpie,
-	// but crucially NOT reach the upstream ClaudeBase server.
-	if rec.Code == 200 {
-		t.Fatalf("unexpected success for fake/m1")
 	}
 }

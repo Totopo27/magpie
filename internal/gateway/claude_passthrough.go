@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -21,22 +22,34 @@ func isClaudeOAuth(r *http.Request) bool {
 	return false
 }
 
-// isNativeAnthropicModel reports whether model names an Anthropic native model
-// rather than a Magpie provider (provider/model) or routing group (group/...).
-func isNativeAnthropicModel(model string) bool {
-	return model != "" && !strings.Contains(model, "/")
+// isClaudePassthrough reports whether the request should pass through directly to
+// Anthropic's official API:
+// 1. Opt-in setting is enabled in magpie's settings (settings.Load().ClaudePassthrough).
+// 2. Request carries Claude Code's own OAuth bearer token (isClaudeOAuth(r)).
+// 3. Any tier stand-in configured in magpie for Claude Code is respected. If the model
+//    is re-routed to a magpie provider or group, it does not pass through.
+// 4. The effective model belongs to the Claude family (claude-opus-..., claude-sonnet-..., etc.).
+func isClaudePassthrough(r *http.Request, model string) bool {
+	if !settings.Load().ClaudePassthrough || !isClaudeOAuth(r) {
+		return false
+	}
+	if m := claudeTierStandIn(agentOf(r), model); m != "" {
+		model = m
+	}
+	if model == "" || strings.Contains(model, "/") {
+		return false
+	}
+	bare := strings.ToLower(strings.TrimSuffix(model, "[1m]"))
+	return claudeFamily.MatchString(bare)
 }
 
 // claudeUpstream relays a request as it came from Claude Code, carrying its own
 // OAuth bearer token, to Anthropic's official API (provider.ClaudeBase).
+// It skips redaction so the user's prompt is not rewritten on its way to their
+// own official subscription.
 func (s *Server) claudeUpstream(w http.ResponseWriter, r *http.Request, path string, body []byte) {
 	start := time.Now()
 	usage.Saw(agentOf(r))
-	if r.Method == http.MethodPost {
-		var unmask func()
-		w, body, unmask = redacted(w, body)
-		defer unmask()
-	}
 
 	u := provider.ClaudeBase + path
 	if r.URL.RawQuery != "" {
