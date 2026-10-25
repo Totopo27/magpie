@@ -430,19 +430,17 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 	}
 	var use struct {
 		Model string `json:"model"` // the one that answered, when the reply says
-		Usage struct {
-			Input  int `json:"input_tokens"`
-			Output int `json:"output_tokens"`
-		} `json:"usage"`
+		Usage aUsage `json:"usage"`
 	}
 	_ = decodeJSON(b, &use)
+	used := use.Usage.usage()
 	var keyID, keyName string
 	if p.Account == nil && p.Key != "" {
 		keyID, keyName = provider.KeyID(p.Key), p.KeyName
 	}
 	usage.Append(usage.Record{Time: start, Agent: usage.AgentOf(RouterAgent), Kind: "routing", Provider: p.ID, Host: p.Where(), Model: model, Requested: model, Served: use.Model,
 		ProviderKeyID: keyID, ProviderKeyName: keyName, ProviderAccount: accountOf(p),
-		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: status})
+		Input: used.Input, Output: used.Output, CacheRead: used.CacheRead, CacheWrite: used.CacheWrite, CacheWrite1h: used.CacheWrite1h, Millis: time.Since(start).Milliseconds(), Status: status})
 	return b, nil
 }
 

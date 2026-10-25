@@ -168,7 +168,7 @@ func (s *Server) serveDecideTries(w http.ResponseWriter, r *http.Request, body [
 				try := &t.Tries[len(t.Tries)-1]
 				try.Done, try.Status, try.Millis, try.Error, try.Fail, try.Rest = true, status, ms, msg, fail, rest
 				if status < 400 || last || r.Context().Err() != nil {
-					t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, time.Since(start).Milliseconds(), used.Input+used.Output
+					t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, time.Since(start).Milliseconds(), used.Input+used.Output+used.CacheRead+used.CacheWrite
 					t.Usage = routeUsage(c.p.ID, c.model, used)
 				}
 			})
@@ -197,13 +197,10 @@ func (s *Server) serveDecideTries(w http.ResponseWriter, r *http.Request, body [
 		}
 		var use struct {
 			Model string `json:"model"` // the one that answered, when the reply says
-			Usage struct {
-				Input  int `json:"input_tokens"`
-				Output int `json:"output_tokens"`
-			} `json:"usage"`
+			Usage aUsage `json:"usage"`
 		}
 		_ = json.Unmarshal(b, &use)
-		used := Usage{Input: use.Usage.Input, Output: use.Usage.Output}
+		used := use.Usage.usage()
 		errMsg, fail := "", ""
 		var rest *Rest
 		if status >= 300 {
@@ -221,7 +218,7 @@ func (s *Server) serveDecideTries(w http.ResponseWriter, r *http.Request, body [
 		took := time.Since(start).Milliseconds() // before what magpie writes down of it (#1939)
 		tried(status, errMsg, fail, rest, used)
 		if status < 400 {
-			servedCandidate(c, used.Input+used.Output)
+			servedCandidate(c, used.Input+used.Output+used.CacheRead+used.CacheWrite)
 		}
 		var keyID, keyName string
 		if c.p.Account == nil && c.p.Key != "" {
@@ -229,7 +226,7 @@ func (s *Server) serveDecideTries(w http.ResponseWriter, r *http.Request, body [
 		}
 		appendUsage(r, usage.Record{RouteID: tr.ID, Time: start, Agent: who.agent, Via: who.via, Provider: c.p.ID, Host: c.p.Where(), Model: c.model, Requested: asked, Served: use.Model,
 			ProviderKeyID: keyID, ProviderKeyName: keyName, ProviderAccount: accountOf(c.p),
-			Input: use.Usage.Input, Output: use.Usage.Output, Millis: took, Status: status})
+			Input: used.Input, Output: used.Output, CacheRead: used.CacheRead, CacheWrite: used.CacheWrite, CacheWrite1h: used.CacheWrite1h, Millis: took, Status: status})
 		ctype := header.Get("Content-Type")
 		if ctype == "" || status < 300 {
 			ctype = "application/json"
